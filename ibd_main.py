@@ -1,18 +1,26 @@
-import pandas as ps
+import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 import numpy as np
+from dash import Dash, dcc, html, Input, Output, callback
+import geopandas as gpd
+from geodatasets import get_path
 
-# Read files as a pandas dataframe
+# Read IBD file into pandas dataframe
 file = Path("IBD/ibd220.ibd.v54.1.pub.tsv")
-df = ps.read_csv(file, delimiter="\t")
-# colname = "lengthM"
-# ps.DataFrame.hist(df, column=colname, bins=500)
-# plt.show()
-# print(df[colname].quantile(q=0.5))
-# print(df[colname].quantile(q=0.25))
-# print(df[colname].quantile(q=0.75))
-# print(df[colname].quantile(q=0.90))
+df = pd.read_csv(file, delimiter="\t")
+
+# Read annotation for the samples from the AADR database
+file2 = Path("v54.1_1240K_public.anno")
+df2 = pd.read_csv(file2, delimiter="\t")
+
+# Extract only relevant columns: ID, date, population/nationality, lat/long
+df_anno = df2.iloc[:,[0,7,13,14,15]]
+df_anno.columns.values[0] = "id"
+df_anno.columns.values[1] = "date" # this is years before 1950. !NB! Adjust theese values
+df_anno.columns.values[2] = "population"
+df_anno.columns.values[3] = "latitude"
+df_anno.columns.values[4] = "longitude"
 
 # Set ID name for individual you want to look at. !NB Change this to user input later!
 id_name = "2H17.SG"
@@ -45,5 +53,25 @@ for id2 in c2_ids:
         cm = tmp_df["lengthM"].sum(axis=0)
         dict_ibd[id2] = cm
 
-for key in dict_ibd:
-    print(key,dict_ibd[key])
+# Convert dictionary with distances to a dataframe
+df_dist = pd.DataFrame.from_dict(dict_ibd, orient='index',columns=["sum_lengthM"])
+df_dist = df_dist.rename_axis("id").reset_index()
+# Add back id of interest to the dataframe with "100" relatedness to themselves
+df_dist.loc[len(df_dist.index)] = [id_name, 100]
+
+# Merge distance dataframe with the metadata, based on the common id column
+df_joined = df_dist.merge(df_anno)
+
+# Convert dataframe into a geopandas geodataframe by converting the lat/long to
+# a geometry data type
+
+gdf = gpd.GeoDataFrame(
+    df_joined,geometry=gpd.points_from_xy(df_joined.longitude, df_joined.latitude),crs="EPSG:4326"
+)
+
+# Plot individuals on a world map
+world = gpd.read_file(get_path("naturalearth.land"))
+ax = world.plot(color="white", edgecolor="black")
+gdf.plot(ax=ax, color="red")
+
+plt.show()
