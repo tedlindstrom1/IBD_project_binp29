@@ -79,4 +79,13 @@ fig = px.scatter_geo(gdf,
         color = "sum_lengthM",
         range_color = [0,0.4] # this should be changed to be based on the highest value in the dataframe
         )
-fig.show()
+
+# Plot the above figure in a Dash interactive environment
+app = Dash(__name__)
+
+app.layout = html.Div([
+    dcc.Graph(figure=fig)
+])
+
+if __name__ == '__main__':
+    app.run(debug=True)
