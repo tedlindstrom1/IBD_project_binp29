@@ -5,6 +5,8 @@ import numpy as np
 from dash import Dash, dcc, html, Input, Output, callback
 import geopandas as gpd
 from geodatasets import get_path
+import plotly.express as px
+import plotly.graph_objects as go
 
 # Read IBD file into pandas dataframe
 file = Path("IBD/ibd220.ibd.v54.1.pub.tsv")
@@ -57,21 +59,24 @@ for id2 in c2_ids:
 df_dist = pd.DataFrame.from_dict(dict_ibd, orient='index',columns=["sum_lengthM"])
 df_dist = df_dist.rename_axis("id").reset_index()
 # Add back id of interest to the dataframe with "100" relatedness to themselves
-df_dist.loc[len(df_dist.index)] = [id_name, 100]
+df_dist.loc[len(df_dist.index)] = [id_name, 1]
 
 # Merge distance dataframe with the metadata, based on the common id column
 df_joined = df_dist.merge(df_anno)
 
 # Convert dataframe into a geopandas geodataframe by converting the lat/long to
 # a geometry data type
-
 gdf = gpd.GeoDataFrame(
     df_joined,geometry=gpd.points_from_xy(df_joined.longitude, df_joined.latitude),crs="EPSG:4326"
 )
 
-# Plot individuals on a world map
-world = gpd.read_file(get_path("naturalearth.land"))
-ax = world.plot(color="white", edgecolor="black")
-gdf.plot(ax=ax, color="red")
-
-plt.show()
+# Plot interactive map using plotly scatter_geo on a world map, color by value of sum_lengthM
+fig = px.scatter_geo(gdf,
+        lon = 'longitude',
+        lat = 'latitude',
+        hover_data = ['id','population','sum_lengthM'],
+        projection="natural earth",
+        color = "sum_lengthM",
+        range_color = [0,0.4] # this should be changed to be based on the highest value in the dataframe
+        )
+fig.show()
