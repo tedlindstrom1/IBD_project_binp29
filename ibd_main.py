@@ -37,10 +37,8 @@ df_anno = df_anno[df_anno['id'].isin(idb_ids)] # 4093 individuals, some are miss
 # Do reciprocal filtering to only keep IDB entries that are annotated in the AADF database
 idb_ids = df_anno.id.unique()
 
-def ibd_dist(id_name):
-    # Set ID name for individual you want to look at. !NB Change this to user input later!
-    #id_name = "2H17.SG"
 
+def ibd_dist(id_name):
     # Subset data frame to only contain rows with this individual in either column
     df_sub = df_ibd.loc[(df_ibd["iid1"] == id_name) | (df_ibd["iid2"] == id_name)]
 
@@ -72,6 +70,7 @@ def ibd_dist(id_name):
     # Convert dictionary with distances to a dataframe
     df_dist = pd.DataFrame.from_dict(dict_ibd, orient='index',columns=["sum_lengthM"])
     df_dist = df_dist.rename_axis("id").reset_index()
+
     # Add back id of interest to the dataframe with "100" relatedness to themselves
     # df_dist.loc[len(df_dist.index)] = [id_name, 1]
 
@@ -79,28 +78,31 @@ def ibd_dist(id_name):
     gdf = df_dist.merge(df_anno)
     return(gdf)
 
-# Convert dataframe into a geopandas geodataframe by converting the lat/long to
-# a geometry data type
-# gdf = gpd.GeoDataFrame(
-#     df_joined,geometry=gpd.points_from_xy(df_joined.longitude, df_joined.latitude),crs="EPSG:4326"
-# )
-
-# Plot interactive map using plotly scatter_geo on a world map, color by value of sum_lengthM
-fig = px.scatter_geo(ibd_dist("2H17.SG"),
-        lon = 'longitude',
-        lat = 'latitude',
-        hover_data = ['id','population','sum_lengthM'],
-        projection="natural earth",
-        color = "sum_lengthM",
-        range_color = [0,0.4] # this should be changed to be based on the highest value in the dataframe
-        )
-
-# Plot the above figure in a Dash interactive environment
+# Run Dash
 app = Dash(__name__)
 
+# Format the Dash app window, with the map and a dropdown menu with all individuals in it
 app.layout = html.Div([
-    dcc.Graph(figure=fig)
+    dcc.Graph(id='map'),
+    dcc.Dropdown(idb_ids,
+    "ROUQEE.SG",
+    id="menu")
 ])
 
+# Callback function to update the map based on user specified individual selection
+@callback(
+    Output("map","figure"),
+    Input("menu","value"))
+def update_map(menu_value):
+    ddf = ibd_dist(menu_value) # use ibd_dist function with the picked dropdown menu value
+    fig = px.scatter_geo(ddf,
+                         lon='longitude',
+                         lat='latitude',
+                         hover_data=['id', 'population', 'sum_lengthM'],
+                         projection="natural earth",
+                         color="sum_lengthM",
+                         range_color=[ddf['sum_lengthM'].min(), ddf['sum_lengthM'].max()]
+                         )
+    return(fig)
 if __name__ == '__main__':
     app.run(debug=True)
