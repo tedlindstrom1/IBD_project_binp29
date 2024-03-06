@@ -25,6 +25,23 @@ df_anno.columns.values[3] = "latitude"
 df_anno.columns.values[4] = "longitude"
 # Convert years to years before year 0
 df_anno.loc[:,'date'] = df_anno['date'].apply(lambda x: x - 1950)
+# Bin age in 1000 year bins
+max_age = df_anno.loc[:,'date'].max()
+if max_age % 1000 == 0:
+    pass
+else:
+    max_age = max_age + 1000 - (max_age % 1000)
+
+min_age = df_anno.loc[:,'date'].min()
+if min_age % 1000 == 0:
+    pass
+else:
+    min_age = min_age - (min_age % 1000)
+bins = [x for x in range(min_age,max_age,1000)]
+
+# Add bin info to the annotation dataframe
+df_anno['age_bin'] = pd.cut(df_anno['date'], bins, labels=bins[:-1])
+
 
 # Only keep annotation info for individuals that are in the provided IDB data
 # Find unique IDs from the ID columns
@@ -36,9 +53,8 @@ df_anno = df_anno[df_anno['id'].isin(idb_ids)] # 4093 individuals, some are miss
 
 # Do reciprocal filtering to only keep IDB entries that are annotated in the AADF database
 idb_ids = df_anno.id.unique()
-
-
-def ibd_dist(id_name):
+def ibd_dist(id_name,year_bin):
+    # Convert the year data by rounding down to closest 1000
     # Subset data frame to only contain rows with this individual in either column
     df_sub = df_ibd.loc[(df_ibd["iid1"] == id_name) | (df_ibd["iid2"] == id_name)]
 
@@ -76,6 +92,9 @@ def ibd_dist(id_name):
 
     # Merge distance dataframe with the metadata, based on the common id column
     gdf = df_dist.merge(df_anno)
+    # Filter only on the values of the user selected year bin
+    gdf = gdf.loc[gdf["age_bin"] == year_bin]
+
     return(gdf)
 
 # Run Dash
@@ -84,21 +103,32 @@ app = Dash(__name__)
 # Format the Dash app window, with the map and a dropdown menu with all individuals in it
 app.layout = html.Div([
     dcc.Graph(id='map'),
+
     dcc.Dropdown(idb_ids,
     "ROUQEE.SG",
-    id="menu")
+    id="menu"),
+
+    dcc.Slider(
+        df_anno['age_bin'].min(),
+        df_anno['age_bin'].max(),
+        step=None,
+        value=df_anno['age_bin'].min(),
+        marks={str(year): str(year) for year in df_anno['age_bin'].unique()},
+        id='year-slider'
+    )
 ])
 
 # Callback function to update the map based on user specified individual selection
 @callback(
     Output("map","figure"),
-    Input("menu","value"))
-def update_map(menu_value):
-    ddf = ibd_dist(menu_value) # use ibd_dist function with the picked dropdown menu value
+    Input("menu","value"),
+    Input('year-slider','value'))
+def update_map(menu_value,year_value):
+    ddf = ibd_dist(menu_value,year_value) # use ibd_dist function with the picked dropdown menu value
     fig = px.scatter_geo(ddf,
                          lon='longitude',
                          lat='latitude',
-                         hover_data=['id', 'population', 'sum_lengthM'],
+                         hover_data=['id', 'population', 'sum_lengthM','date'],
                          projection="natural earth",
                          color="sum_lengthM",
                          range_color=[ddf['sum_lengthM'].min(), ddf['sum_lengthM'].max()]
