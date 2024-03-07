@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 import numpy as np
-from dash import Dash, dcc, html, Input, Output, callback
+from dash import Dash, dcc, html, Input, Output, callback, dash_table
 import geopandas as gpd
 from geodatasets import get_path
 import plotly.express as px
@@ -89,14 +89,15 @@ def ibd_dist(id_name,year_bin):
 
     # Add back id of interest to the dataframe with "100" relatedness to themselves
     # df_dist.loc[len(df_dist.index)] = [id_name, 1]
-
     # Merge distance dataframe with the metadata, based on the common id column
     gdf = df_dist.merge(df_anno)
+    # Find min and max age bins for constraining the age slider on the map
+    min_bin = gdf['age_bin'].min()
+    max_bin = gdf['age_bin'].max()
     # Filter only on the values of the user selected year bin
     gdf = gdf.loc[gdf["age_bin"] == year_bin]
 
-    return(gdf)
-
+    return(gdf,min_bin,max_bin)
 # Run Dash
 app = Dash(__name__)
 
@@ -109,22 +110,30 @@ app.layout = html.Div([
     id="menu"),
 
     dcc.Slider(
-        df_anno['age_bin'].min(),
-        df_anno['age_bin'].max(),
+        min=df_anno['age_bin'].min(),
+        max=df_anno['age_bin'].max(),
         step=None,
         value=df_anno['age_bin'].min(),
         marks={str(year): str(year) for year in df_anno['age_bin'].unique()},
         id='year-slider'
-    )
+    ),
+
+    # dcc.Slider(id='year-slider'),
+
+    html.Div(id="table")
 ])
 
 # Callback function to update the map based on user specified individual selection
 @callback(
     Output("map","figure"),
+    Output("table", "children"),
+    Output("year-slider", "min"), Output("year-slider", "max"),
     Input("menu","value"),
     Input('year-slider','value'))
 def update_map(menu_value,year_value):
-    ddf = ibd_dist(menu_value,year_value) # use ibd_dist function with the picked dropdown menu value
+    # Get the age and id filtered dataframe, as well as min and max age bins for matches for this individual
+    ddf, slider_min, slider_max = ibd_dist(menu_value, year_value)
+    # Prepare figure
     fig = px.scatter_geo(ddf,
                          lon='longitude',
                          lat='latitude',
@@ -132,7 +141,7 @@ def update_map(menu_value,year_value):
                          projection="natural earth",
                          color="sum_lengthM",
                          range_color=[0,1]
-                         #range_color=[ddf['sum_lengthM'].min(), ddf['sum_lengthM'].max()]
+                         #range_color=[ddf['sum_lengthM'].min(), ddf['sum_lengthM'].max()] # to change to relative color scale instead of absolute
                          )
     # Also plot info on selected individual as a green dot with some selected hover info
     ind_row = df_anno.loc[df_anno['id'] == menu_value].to_dict('records')
@@ -143,7 +152,11 @@ def update_map(menu_value,year_value):
                                 hoverinfo='text',
                                 hovertext=f"Selected ID: {ind_row[0]['id']}, Population: {ind_row[0]['population']}, Age: {ind_row[0]['date']}"
                                 ))
+    # Print table of matches, make it sortable
+    tbl = dash_table.DataTable(ddf.to_dict('records'),
+                               [{"name": i, "id": i} for i in ddf.columns],
+                               sort_action='native')
 
-    return(fig)
+    return(fig,tbl,slider_min,slider_max)
 if __name__ == '__main__':
     app.run(debug=True)
