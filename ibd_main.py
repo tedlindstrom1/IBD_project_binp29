@@ -131,8 +131,19 @@ def update_map(menu_value,year_value):
                          hover_data=['id', 'population', 'sum_lengthM','date'],
                          projection="natural earth",
                          color="sum_lengthM",
-                         range_color=[ddf['sum_lengthM'].min(), ddf['sum_lengthM'].max()]
+                         range_color=[0,1]
+                         #range_color=[ddf['sum_lengthM'].min(), ddf['sum_lengthM'].max()]
                          )
+    # Also plot info on selected individual as a green dot with some selected hover info
+    ind_row = df_anno.loc[df_anno['id'] == menu_value].to_dict('records')
+    fig.add_trace(go.Scattergeo(name='Selected',
+                                lon=[ind_row[0]['longitude']],
+                                lat=[ind_row[0]['latitude']],
+                                marker={'color':'green'},
+                                hoverinfo='text',
+                                hovertext=f"Selected ID: {ind_row[0]['id']}, Population: {ind_row[0]['population']}, Age: {ind_row[0]['date']}"
+                                ))
+
     return(fig)
 if __name__ == '__main__':
     app.run(debug=True)
