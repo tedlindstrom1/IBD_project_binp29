@@ -94,10 +94,11 @@ def ibd_dist(id_name,year_bin):
     # Find min and max age bins for constraining the age slider on the map
     min_bin = gdf['age_bin'].min()
     max_bin = gdf['age_bin'].max()
+    bin_marks = {str(year): str(year) for year in gdf['age_bin'].unique()}
     # Filter only on the values of the user selected year bin
     gdf = gdf.loc[gdf["age_bin"] == year_bin]
 
-    return(gdf,min_bin,max_bin)
+    return(gdf,min_bin,max_bin,bin_marks)
 # Run Dash
 app = Dash(__name__)
 
@@ -118,8 +119,6 @@ app.layout = html.Div([
         id='year-slider'
     ),
 
-    # dcc.Slider(id='year-slider'),
-
     html.Div(id="table")
 ])
 
@@ -128,20 +127,22 @@ app.layout = html.Div([
     Output("map","figure"),
     Output("table", "children"),
     Output("year-slider", "min"), Output("year-slider", "max"),
+    Output("year-slider", "marks"),
     Input("menu","value"),
     Input('year-slider','value'))
 def update_map(menu_value,year_value):
     # Get the age and id filtered dataframe, as well as min and max age bins for matches for this individual
-    ddf, slider_min, slider_max = ibd_dist(menu_value, year_value)
+    ddf, slider_min, slider_max, slider_marks = ibd_dist(menu_value, year_value)
     # Prepare figure
+
     fig = px.scatter_geo(ddf,
                          lon='longitude',
                          lat='latitude',
                          hover_data=['id', 'population', 'sum_lengthM','date'],
                          projection="natural earth",
                          color="sum_lengthM",
-                         range_color=[0,1]
-                         #range_color=[ddf['sum_lengthM'].min(), ddf['sum_lengthM'].max()] # to change to relative color scale instead of absolute
+                         #range_color=[0,1]
+                         range_color=[ddf['sum_lengthM'].min(), ddf['sum_lengthM'].max()] # to change to relative color scale instead of absolute
                          )
     # Also plot info on selected individual as a green dot with some selected hover info
     ind_row = df_anno.loc[df_anno['id'] == menu_value].to_dict('records')
@@ -157,6 +158,6 @@ def update_map(menu_value,year_value):
                                [{"name": i, "id": i} for i in ddf.columns],
                                sort_action='native')
 
-    return(fig,tbl,slider_min,slider_max)
+    return(fig,tbl,slider_min,slider_max,slider_marks)
 if __name__ == '__main__':
     app.run(debug=True)
