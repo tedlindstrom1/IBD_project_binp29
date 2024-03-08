@@ -54,7 +54,7 @@ df_anno = df_anno[df_anno['id'].isin(idb_ids)] # 4093 individuals, some are miss
 
 # Do reciprocal filtering to only keep IDB entries that are annotated in the AADF database
 idb_ids = df_anno.id.unique()
-def ibd_dist(id_name,year_bin):
+def ibd_dist(id_name,year_bin,cM_filter):
     # Convert the year data by rounding down to closest 1000
     # Subset data frame to only contain rows with this individual in either column
     df_sub = df_ibd.loc[(df_ibd["iid1"] == id_name) | (df_ibd["iid2"] == id_name)]
@@ -106,7 +106,7 @@ def ibd_dist(id_name,year_bin):
             bin_marks[year] = age
 
     # Filter data frame to retain only on the values of the user selected year bin
-    gdf = gdf.loc[gdf["age_bin_numeric"] == year_bin]
+    gdf = gdf.loc[(gdf["age_bin_numeric"] == year_bin) & (gdf["sum_lengthM"] >= cM_filter)]
 
     return(gdf,min_bin,max_bin,bin_marks)
 # Run Dash
@@ -128,6 +128,12 @@ app.layout = html.Div([
         marks=None,
         id='year-slider'
     ),
+    html.Div([dcc.Input(id='filter',
+                        value=0,
+                        type='text',
+                        minLength=1,
+                        debounce=True)]),
+
 
     html.Div(id="table")
 ])
@@ -139,10 +145,11 @@ app.layout = html.Div([
     Output("year-slider", "min"), Output("year-slider", "max"),
     Output("year-slider", "marks"),
     Input("menu","value"),
-    Input('year-slider','value'))
-def update_map(menu_value,year_value):
+    Input('year-slider','value'),
+    Input("filter","value"))
+def update_map(menu_value,year_value,cM_filter):
     # Get the age and id filtered dataframe, as well as min and max age bins for matches for this individual and slider marks
-    ddf, slider_min, slider_max, slider_marks = ibd_dist(menu_value, year_value)
+    ddf, slider_min, slider_max, slider_marks = ibd_dist(menu_value, year_value, float(cM_filter))
     # Prepare figure
 
     fig = px.scatter_geo(ddf,
