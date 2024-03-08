@@ -54,6 +54,21 @@ df_anno = df_anno[df_anno['id'].isin(idb_ids)] # 4093 individuals, some are miss
 
 # Do reciprocal filtering to only keep IDB entries that are annotated in the AADF database
 idb_ids = df_anno.id.unique()
+
+# Filter dataframe based on individuals found in AADF
+df_ibd = df_ibd.loc[(df_ibd.iid1.isin(idb_ids)) & (df_ibd.iid2.isin(idb_ids))]
+# Create dictionary with IDs and their corresponding population
+df_pop = df_anno[['id','population']]
+pop_dict = dict(zip(df_pop.id, df_pop.population))
+
+df_ibd['iid1_pop'] = df_ibd['iid1'].apply(lambda x: pop_dict[x])
+df_ibd['iid2_pop'] = df_ibd['iid2'].apply(lambda x: pop_dict[x])
+
+# pop_name = "Albania"
+# df_sub = df_ibd.loc[((df_ibd["iid1_pop"] == pop_name) | (df_ibd["iid2_pop"] == pop_name)) & ~((df_ibd["iid1_pop"] == pop_name) & (df_ibd["iid2_pop"] == pop_name))]
+# t = df_sub.groupby(["iid1_pop","iid2_pop"]).lengthM.sum().reset_index()
+# print(t)
+# exit()
 def ibd_dist(id_name,year_bin,cM_filter):
     # Convert the year data by rounding down to closest 1000
     # Subset data frame to only contain rows with this individual in either column
@@ -107,6 +122,131 @@ def ibd_dist(id_name,year_bin,cM_filter):
 
     # Filter data frame to retain only on the values of the user selected year bin
     gdf = gdf.loc[(gdf["age_bin_numeric"] == year_bin) & (gdf["sum_lengthM"] >= cM_filter)]
+
+    return(gdf,min_bin,max_bin,bin_marks)
+
+def pop_dist(pop_name, year_bin, cM_filter):
+    # Convert the year data by rounding down to closest 1000
+    # Subset data frame to only contain rows with this individual in either column
+    df_sub = df_ibd.loc[(df_ibd["iid1_pop"] == pop_name) | (df_ibd["iid2_pop"] == pop_name)]
+
+    # Extract unique IDs from the id columns and delete the current individuals ID from the array
+    c1_ids = df_sub.iid1.unique()
+    c1_d = []
+    for i in c1_ids:
+        if pop_dict[i] == pop_name:
+            c1_d.append(np.argwhere(c1_ids == i))
+
+    for ii in c1_d:
+        c1_ids = np.delete(c1_ids, ii)
+
+    c2_ids = df_sub.iid2.unique()
+    c2_d = []
+    for j in c2_ids:
+        if pop_dict[j] == pop_name:
+            c2_d.append(np.argwhere(c2_ids == j))
+    for jj in c2_d:
+        c2_ids = np.delete(c2_ids, jj)
+
+    # Delete all IDs belonging to the selected population from the two above arrays
+    # Then pick out all remaining IDs as for the individual level function and store in array
+    # Then merge with annotation dataframe
+    # Add back population info using the dict
+    # Figure out how to plot populations
+
+    # Fill out dictionary with the sum of the Morgan distances for each other person ID
+    dict_ibd = {}
+    for id1 in c1_ids:
+        tmp_df = df_sub.loc[(df_sub["iid1"] == str(id1)) & (df_sub["iid2_pop"] == pop_name)] # "& age bin == ..."
+        cm = tmp_df["lengthM"].sum(axis=0)
+        dict_ibd[id1] = cm
+
+    for id2 in c2_ids:
+        if id2 in dict_ibd.keys():
+            tmp_df = df_sub.loc[(df_sub["iid1_pop"] == pop_name) & (df_sub["iid2"] == str(id2))]
+            cm = tmp_df["lengthM"].sum(axis=0)
+            dict_ibd[id2] += cm
+
+        else:
+            tmp_df = df_sub.loc[(df_sub["iid1_pop"] == pop_name) & (df_sub["iid2"] == str(id2))]
+            cm = tmp_df["lengthM"].sum(axis=0)
+            dict_ibd[id2] = cm
+
+    # Convert dictionary with distances to a dataframe
+    df_dist = pd.DataFrame.from_dict(dict_ibd, orient='index',columns=["sum_lengthM"])
+    df_dist = df_dist.rename_axis("id").reset_index()
+
+    # Merge distance dataframe with the metadata, based on the common id column
+    gdf = df_dist.merge(df_anno)
+
+    # Find min and max age bins for constraining the age slider on the map
+    min_bin = gdf['age_bin_numeric'].min()
+    max_bin = gdf['age_bin_numeric'].max()
+
+    # Specify mark names for the slider, convert age into CE/BCE
+    bin_marks = {}
+    for year in gdf['age_bin_numeric'].unique():
+        if year <= 0:
+            age = str(abs(year)) + " CE"
+            bin_marks[year] = age
+        if year > 0:
+            age = str(year) + " BCE"
+            bin_marks[year] = age
+
+    # Filter data frame to retain only on the values of the user selected year bin
+    gdf = gdf.loc[gdf["age_bin_numeric"] == year_bin]
+    # Sum per country
+    gdff = gdf.groupby("population").sum_lengtghM.sum().reset_index()
+    gdff = gdff.loc[gdff["sum_lengthM"] >= cM_filter]
+
+    return(gdff,min_bin,max_bin,bin_marks)
+
+def pop2_dist(pop_name,year_bin,cM_filter): # remove this one
+    df_sub = df_idb
+
+
+
+    # Subset data frame to only contain rows with this population
+
+    df_sub = df_ibd.loc[(df_ibd["population"] == pop_name)]
+
+    # Extract unique population names from the population columns and delete the current pop from the array
+    c_ids = df_sub.population.unique()
+    c_ids = np.delete(c_ids, np.argwhere(c_ids == pop_name))
+
+    # Extract bin information
+    # Create data frame without selected population
+    bin_df = df_sub[df_sub['population'].isin(c_ids)]
+    # Find min and max age bins for constraining the age slider on the map
+    min_bin = bin_df['age_bin_numeric'].min()
+    max_bin = bin_df['age_bin_numeric'].max()
+    # Specify mark names for the slider, convert age into CE/BCE
+    bin_marks = {}
+    for year in bin_df['age_bin_numeric'].unique():
+        if year <= 0:
+            age = str(abs(year)) + " CE"
+            bin_marks[year] = age
+        if year > 0:
+            age = str(year) + " BCE"
+            bin_marks[year] = age
+
+    # Remove matches that are not in the user defined age bin
+    bin_df = bin_df.loc[bin_df['age_bin_numeric'] == year_bin]
+    # Fill out dictionary with the sum of the Morgan distances for each other population ID
+    dict_pop = {}
+    for pop in c_ids:
+        tmp_df = df_sub.loc[(df_sub["population"] == str(pop))]
+        cm = tmp_df["lengthM"].sum(axis=0)
+        dict_pop[pop] = cm
+
+    # Convert dictionary with distances to a dataframe
+    df_dist = pd.DataFrame.from_dict(dict_pop, orient='index',columns=["sum_lengthM"])
+    df_dist = df_dist.rename_axis("id").reset_index()
+
+    # Merge distance dataframe with the metadata, based on the population column
+    gdf = df_dist.merge(df_anno)
+    # Filter data frame to retain only on the values of the user selected cM cutoff filter
+    gdf = gdf.loc[gdf["sum_lengthM"] >= cM_filter]
 
     return(gdf,min_bin,max_bin,bin_marks)
 # Run Dash
