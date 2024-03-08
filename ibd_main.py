@@ -25,6 +25,8 @@ df_anno.columns.values[3] = "latitude"
 df_anno.columns.values[4] = "longitude"
 # Convert years to years before year 0
 df_anno.loc[:,'date'] = df_anno['date'].apply(lambda x: x - 1950)
+df_anno['age'] = df_anno['date'].apply(lambda x: str(abs(x)) + " CE" if x <= 0 else str(x) + " BCE")
+
 # Bin age in 1000 year bins
 max_age = df_anno.loc[:,'date'].max()
 if max_age % 1000 == 0:
@@ -40,8 +42,7 @@ else:
 bins = [x for x in range(min_age,max_age,1000)]
 
 # Add bin info to the annotation dataframe
-df_anno['age_bin'] = pd.cut(df_anno['date'], bins, labels=bins[:-1])
-
+df_anno['age_bin_numeric'] = pd.cut(df_anno['date'], bins, labels=bins[:-1])
 
 # Only keep annotation info for individuals that are in the provided IDB data
 # Find unique IDs from the ID columns
@@ -87,16 +88,25 @@ def ibd_dist(id_name,year_bin):
     df_dist = pd.DataFrame.from_dict(dict_ibd, orient='index',columns=["sum_lengthM"])
     df_dist = df_dist.rename_axis("id").reset_index()
 
-    # Add back id of interest to the dataframe with "100" relatedness to themselves
-    # df_dist.loc[len(df_dist.index)] = [id_name, 1]
     # Merge distance dataframe with the metadata, based on the common id column
     gdf = df_dist.merge(df_anno)
+
     # Find min and max age bins for constraining the age slider on the map
-    min_bin = gdf['age_bin'].min()
-    max_bin = gdf['age_bin'].max()
-    bin_marks = {str(year): str(year) for year in gdf['age_bin'].unique()}
-    # Filter only on the values of the user selected year bin
-    gdf = gdf.loc[gdf["age_bin"] == year_bin]
+    min_bin = gdf['age_bin_numeric'].min()
+    max_bin = gdf['age_bin_numeric'].max()
+
+    # Specify mark names for the slider, convert age into CE/BCE
+    bin_marks = {}
+    for year in gdf['age_bin_numeric'].unique():
+        if year <= 0:
+            age = str(abs(year)) + " CE"
+            bin_marks[year] = age
+        if year > 0:
+            age = str(year) + " BCE"
+            bin_marks[year] = age
+
+    # Filter data frame to retain only on the values of the user selected year bin
+    gdf = gdf.loc[gdf["age_bin_numeric"] == year_bin]
 
     return(gdf,min_bin,max_bin,bin_marks)
 # Run Dash
@@ -111,11 +121,11 @@ app.layout = html.Div([
     id="menu"),
 
     dcc.Slider(
-        min=df_anno['age_bin'].min(),
-        max=df_anno['age_bin'].max(),
+        min=df_anno['age_bin_numeric'].min(),
+        max=df_anno['age_bin_numeric'].max(),
         step=None,
-        value=df_anno['age_bin'].min(),
-        marks={str(year): str(year) for year in df_anno['age_bin'].unique()},
+        value=df_anno['age_bin_numeric'].min(),
+        marks=None,
         id='year-slider'
     ),
 
@@ -131,14 +141,14 @@ app.layout = html.Div([
     Input("menu","value"),
     Input('year-slider','value'))
 def update_map(menu_value,year_value):
-    # Get the age and id filtered dataframe, as well as min and max age bins for matches for this individual
+    # Get the age and id filtered dataframe, as well as min and max age bins for matches for this individual and slider marks
     ddf, slider_min, slider_max, slider_marks = ibd_dist(menu_value, year_value)
     # Prepare figure
 
     fig = px.scatter_geo(ddf,
                          lon='longitude',
                          lat='latitude',
-                         hover_data=['id', 'population', 'sum_lengthM','date'],
+                         hover_data=['id', 'population', 'sum_lengthM','age'],
                          projection="natural earth",
                          color="sum_lengthM",
                          #range_color=[0,1]
@@ -151,9 +161,10 @@ def update_map(menu_value,year_value):
                                 lat=[ind_row[0]['latitude']],
                                 marker={'color':'green'},
                                 hoverinfo='text',
-                                hovertext=f"Selected ID: {ind_row[0]['id']}, Population: {ind_row[0]['population']}, Age: {ind_row[0]['date']}"
+                                hovertext=f"Selected ID: {ind_row[0]['id']}, Population: {ind_row[0]['population']}, Age: {ind_row[0]['age']}"
                                 ))
     # Print table of matches, make it sortable
+    ddf = ddf.drop(['date','age_bin_numeric'],axis=1)
     tbl = dash_table.DataTable(ddf.to_dict('records'),
                                [{"name": i, "id": i} for i in ddf.columns],
                                sort_action='native')
