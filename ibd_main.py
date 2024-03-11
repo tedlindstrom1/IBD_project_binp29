@@ -253,13 +253,20 @@ def pop2_dist(pop_name,year_bin,cM_filter): # remove this one
 app = Dash(__name__)
 
 # Format the Dash app window, with the map and a dropdown menu with all individuals in it
-app.layout = html.Div([
-    dcc.Graph(id='map'),
-
-    dcc.Dropdown(idb_ids,
-    "ROUQEE.SG",
-    id="menu"),
-
+app.layout = html.Div(children=[
+    # Interactive map
+    html.Div([
+        html.H3('IBD matches',style={'textAlign':'center'}),
+        dcc.Graph(id='map')
+    ]),
+    # Dropdown menu to select display individual
+    html.Div([
+        html.H4("Individual"),
+        dcc.Dropdown(idb_ids,
+        value='I1103',
+        id="menu"),
+    ],style={"width": "15%"}),
+    # Age slider (1000 year bins)
     dcc.Slider(
         min=df_anno['age_bin_numeric'].min(),
         max=df_anno['age_bin_numeric'].max(),
@@ -268,14 +275,22 @@ app.layout = html.Div([
         marks=None,
         id='year-slider'
     ),
-    html.Div([dcc.Input(id='filter',
-                        value=0,
-                        type='text',
-                        minLength=1,
-                        debounce=True)]),
-
-
-    html.Div(id="table")
+    # IBD cutoff filter
+    html.Div([
+        html.H5('IBD filter (M): ',
+                style={'display': 'inline-block'}),
+        dcc.Input(id='filter',
+                    value=0,
+                    type='text',
+                    minLength=1,
+                    debounce=True,
+                    style={'display': 'inline-block'})
+    ]),
+    # Table of individuals with IBD
+    html.Div([
+        html.H4('Found IBD matches'),
+        html.Div(id="table")
+    ])
 ])
 
 # Callback function to update the map based on user specified individual selection
@@ -290,8 +305,8 @@ app.layout = html.Div([
 def update_map(menu_value,year_value,cM_filter):
     # Get the age and id filtered dataframe, as well as min and max age bins for matches for this individual and slider marks
     ddf, slider_min, slider_max, slider_marks = ibd_dist(menu_value, year_value, float(cM_filter))
-    # Prepare figure
 
+    # Prepare figure
     fig = px.scatter_geo(ddf,
                          lon='longitude',
                          lat='latitude',
@@ -299,7 +314,7 @@ def update_map(menu_value,year_value,cM_filter):
                          projection="natural earth",
                          color="sum_lengthM",
                          #range_color=[0,1]
-                         range_color=[ddf['sum_lengthM'].min(), ddf['sum_lengthM'].max()] # to change to relative color scale instead of absolute
+                         range_color=[ddf['sum_lengthM'].min(), ddf['sum_lengthM'].max()], # to change to relative color scale instead of absolute
                          )
     # Also plot info on selected individual as a green dot with some selected hover info
     ind_row = df_anno.loc[df_anno['id'] == menu_value].to_dict('records')
@@ -308,13 +323,37 @@ def update_map(menu_value,year_value,cM_filter):
                                 lat=[ind_row[0]['latitude']],
                                 marker={'color':'green'},
                                 hoverinfo='text',
-                                hovertext=f"Selected ID: {ind_row[0]['id']}, Population: {ind_row[0]['population']}, Age: {ind_row[0]['age']}"
+                                hovertext=f"Selected ID: {ind_row[0]['id']}, Population: {ind_row[0]['population']}, Age: {ind_row[0]['age']}",
+                                showlegend=False
                                 ))
-    # Print table of matches, make it sortable
+
+    # fig.layout.update(legend=dict(
+    #     orientation="v",
+    #     yanchor="auto",
+    #     y=1,
+    #     xanchor="right",
+    #     x=-2
+    # ))
+    # Print table of matches and make it sortable
     ddf = ddf.drop(['date','age_bin_numeric'],axis=1)
+    # Change the column names to more nice format than the dataframe column names
+    coldat = ['id','sum_lengthM','population','latitude','longitude','age']
+    colnames= ['ID','Shared IBD (M)', 'Population', 'Latitude', 'Longitude', 'Age']
     tbl = dash_table.DataTable(ddf.to_dict('records'),
-                               [{"name": i, "id": i} for i in ddf.columns],
-                               sort_action='native')
+                               columns=[{
+                                   'name': col,
+                                   'id': coldat[idx]
+                               } for (idx, col) in enumerate(colnames)],
+                               sort_action='native',
+                               style_cell={'textAlign': 'left'},
+                               style_as_list_view=True,
+                               style_data_conditional=[
+                                   {
+                                       'if': {'row_index': 'odd'},
+                                       'backgroundColor': 'rgb(220, 220, 220)',
+                                   }
+                               ],
+                               )
 
     return(fig,tbl,slider_min,slider_max,slider_marks)
 if __name__ == '__main__':
