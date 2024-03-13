@@ -1,20 +1,32 @@
+#!usr/bin/python3
 import pandas as pd
 from pathlib import Path
 import numpy as np
 from dash import Dash, dcc, html, Input, Output, callback, dash_table
 import plotly.express as px
 import plotly.graph_objects as go
+import sys
+
+# Read in files from command line launch and print usage info if no files are specified or one missing
+while True:
+    try:
+        ibd_file = Path(sys.argv[1])
+        annotation_file = Path(sys.argv[2])
+        break
+    except IndexError:
+        print("Launch with IBD and annotation files: \nibdmap.py <ibd_file> <annotation_file>\nsee README.md for info on usage and format requirements")
+        exit()
 
 # Read IBD file into pandas dataframe
-file = Path("IBD/ibd220.ibd.v54.1.pub.tsv")
-df_ibd = pd.read_csv(file, delimiter="\t")
+#file = Path("IBD/ibd220.ibd.v54.1.pub.tsv")
+df_ibd = pd.read_csv(ibd_file, delimiter="\t")
 
 # Read annotation for the samples from the AADR database
-file2 = Path("v54.1_1240K_public.anno")
-df2 = pd.read_csv(file2, delimiter="\t")
+#file2 = Path("v54.1_1240K_public.anno")
+df2 = pd.read_csv(annotation_file, delimiter="\t")
 
 # Extract only relevant columns: ID, date, population/nationality, lat/long
-df_anno = df2.iloc[:,[0,7,13,14,15]]
+df_anno = df2.iloc[:,[0,7,13,14,15]] # column numbers are easier because the AADR column names are a mess
 df_anno.columns.values[0] = "id"
 df_anno.columns.values[1] = "date"
 df_anno.columns.values[2] = "population"
