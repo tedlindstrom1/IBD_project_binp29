@@ -69,7 +69,7 @@ df_ibd['iid2_pop'] = df_ibd['iid2'].apply(lambda x: pop_dict[x])
 # t = df_sub.groupby(["iid1_pop","iid2_pop"]).lengthM.sum().reset_index()
 # print(t)
 # exit()
-def ibd_dist(id_name,year_bin,cM_filter):
+def ibd_dist(id_name,year_bin,cM_filter_lower,cM_filter_upper):
     # Convert the year data by rounding down to closest 1000
     # Subset data frame to only contain rows with this individual in either column
     df_sub = df_ibd.loc[(df_ibd["iid1"] == id_name) | (df_ibd["iid2"] == id_name)]
@@ -121,7 +121,7 @@ def ibd_dist(id_name,year_bin,cM_filter):
             bin_marks[year] = age
 
     # Filter data frame to retain only on the values of the user selected year bin
-    gdf = gdf.loc[(gdf["age_bin_numeric"] == year_bin) & (gdf["sum_lengthM"] >= cM_filter)]
+    gdf = gdf.loc[(gdf["age_bin_numeric"] == year_bin) & (gdf["sum_lengthM"] >= cM_filter_lower) & (gdf["sum_lengthM"] <= cM_filter_upper)]
 
     return(gdf,min_bin,max_bin,bin_marks)
 
@@ -249,6 +249,7 @@ def pop2_dist(pop_name,year_bin,cM_filter): # remove this one
     gdf = gdf.loc[gdf["sum_lengthM"] >= cM_filter]
 
     return(gdf,min_bin,max_bin,bin_marks)
+
 # Run Dash
 app = Dash(__name__)
 
@@ -277,10 +278,16 @@ app.layout = html.Div(children=[
     ),
     # IBD cutoff filter
     html.Div([
-        html.H5('IBD filter (M): ',
+        html.H5('IBD filter (M) (Lower|Upper): ',
                 style={'display': 'inline-block'}),
-        dcc.Input(id='filter',
+        dcc.Input(id='lower_filter',
                     value=0,
+                    type='text',
+                    minLength=1,
+                    debounce=True,
+                    style={'display': 'inline-block'}),
+        dcc.Input(id='upper_filter',
+                    value=100,
                     type='text',
                     minLength=1,
                     debounce=True,
@@ -301,10 +308,11 @@ app.layout = html.Div(children=[
     Output("year-slider", "marks"),
     Input("menu","value"),
     Input('year-slider','value'),
-    Input("filter","value"))
-def update_map(menu_value,year_value,cM_filter):
+    Input("lower_filter","value"),
+    Input("upper_filter","value"))
+def update_map(menu_value,year_value,cM_filter_lower,cM_filter_upper):
     # Get the age and id filtered dataframe, as well as min and max age bins for matches for this individual and slider marks
-    ddf, slider_min, slider_max, slider_marks = ibd_dist(menu_value, year_value, float(cM_filter))
+    ddf, slider_min, slider_max, slider_marks = ibd_dist(menu_value, year_value, float(cM_filter_lower), float(cM_filter_upper))
 
     # Prepare figure
     fig = px.scatter_geo(ddf,
